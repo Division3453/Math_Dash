@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Math Dash</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page">
+    <h1>Math Dash</h1>
+    <div class="game-panel">
+      <canvas id="gameCanvas" width="800" height="300"></canvas>
+      <div class="hud">
+        <div class="score">Score: <span id="scoreValue">0</span></div>
+        <div class="question-block">
+          <div id="questionText" class="question">Press Space to Start</div>
+          <div class="timer-wrapper">
+            <div class="timer-bar">
+              <div id="timerFill" class="timer-fill"></div>
+            </div>
+          </div>
+          <div id="answerButtons" class="answers"></div>
+        </div>
+      </div>
+      <div class="settings-panel">
+        <h2>Difficulty Settings</h2>
+        <div class="setting">
+          <label for="speedSlider">Player speed <span id="speedValue">6</span></label>
+          <input id="speedSlider" type="range" min="3" max="12" step="1" value="6" />
+        </div>
+        <div class="setting">
+          <label for="jumpSlider">Jump height <span id="jumpValue">18</span></label>
+          <input id="jumpSlider" type="range" min="10" max="24" step="1" value="18" />
+        </div>
+        <div class="setting">
+          <label for="spacingSlider">Obstacle spacing <span id="spacingValue">1300</span> ms</label>
+          <input id="spacingSlider" type="range" min="800" max="2600" step="100" value="1300" />
+        </div>
+        <div class="setting">
+          <label for="timeoutSlider">Question timeout <span id="timeoutValue">5000</span> ms</label>
+          <input id="timeoutSlider" type="range" min="2000" max="10000" step="500" value="5000" />
+        </div>
+      </div>
+    </div>
+    <div class="instructions">
+      <p>Use Space to jump. Answer the math questions to earn bonus points.</p>
+    </div>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>
