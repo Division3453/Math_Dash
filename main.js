@@ -12,6 +12,17 @@ const speedValueLabel = document.getElementById('speedValue');
 const jumpValueLabel = document.getElementById('jumpValue');
 const spacingValueLabel = document.getElementById('spacingValue');
 const timeoutValueLabel = document.getElementById('timeoutValue');
+const easyBtn = document.getElementById('easyBtn');
+const normalBtn = document.getElementById('normalBtn');
+const hardBtn = document.getElementById('hardBtn');
+const customBtn = document.getElementById('customBtn');
+const reviveCheckbox = document.getElementById('reviveCheckbox');
+const reviveOverlay = document.getElementById('reviveOverlay');
+const reviveTimerText = document.getElementById('reviveTimerText');
+const reviveButton = document.getElementById('reviveButton');
+const transitionOverlay = document.getElementById('transitionOverlay');
+const stayButton = document.getElementById('stayButton');
+const goButton = document.getElementById('goButton');
 
 const gameWidth = canvas.width;
 const gameHeight = canvas.height;
@@ -32,6 +43,16 @@ let isHitQuestion = false;
 let hitQuestionPhase = null;
 let level = 1;
 let boss = null;
+let revivePending = false;
+let reviveTimer = 0;
+let reviveEnabled = true;
+let difficultyMode = 'easy';
+let levelTransitionPending = false;
+const difficultyPresets = {
+  easy: { speed: 5, jumpPower: 20, obstacleSpacing: 1600, questionTimeout: 7000 },
+  normal: { speed: 6, jumpPower: 18, obstacleSpacing: 1300, questionTimeout: 5000 },
+  hard: { speed: 9, jumpPower: 16, obstacleSpacing: 1000, questionTimeout: 3500 },
+};
 let settings = {
   jumpPower: 18,
   obstacleSpacing: 1300,
@@ -40,7 +61,7 @@ let settings = {
 
 function resetGame() {
   score = 0;
-  scrollSpeed = parseInt(speedSlider.value, 10);
+  applyDifficulty(difficultyMode, false);
   lastObstacleTime = 0;
   questionTimer = 0;
   questionExpired = false;
@@ -69,6 +90,7 @@ function startGame() {
   if (gameState === 'playing') return;
   resetGame();
   gameState = 'playing';
+  setDifficultyControlsEnabled(false);
   questionTimer = 0;
   currentQuestion = createQuestion();
   renderQuestion();
@@ -76,9 +98,54 @@ function startGame() {
 }
 
 function endGame() {
+  if (revivePending || attemptRevive()) {
+    return;
+  }
+
   gameState = 'gameOver';
+  setDifficultyControlsEnabled(true);
   questionText.textContent = 'Game Over! Press Space to Restart';
   answerButtons.innerHTML = '';
+}
+
+function attemptRevive() {
+  if (!reviveEnabled || Math.random() > 0.1) {
+    return false;
+  }
+
+  revivePending = true;
+  reviveTimer = 13000;
+  reviveTimerText.textContent = '13';
+  reviveOverlay.classList.remove('hidden');
+  gameState = 'revivePending';
+  questionText.textContent = 'Chance to revive! Press REVIVE!';
+  answerButtons.innerHTML = '';
+  setDifficultyControlsEnabled(false);
+  return true;
+}
+
+function completeGameOver() {
+  revivePending = false;
+  reviveOverlay.classList.add('hidden');
+  gameState = 'gameOver';
+  setDifficultyControlsEnabled(true);
+  questionText.textContent = 'Game Over! Press Space to Restart';
+  answerButtons.innerHTML = '';
+}
+
+function revivePlayer() {
+  revivePending = false;
+  reviveOverlay.classList.add('hidden');
+  gameState = 'playing';
+  setDifficultyControlsEnabled(false);
+  player.x = 80;
+  player.y = groundY - player.height;
+  player.vy = 0;
+  player.isOnGround = true;
+  obstacles = [];
+  questionTimer = 0;
+  currentQuestion = createQuestion();
+  renderQuestion();
 }
 
 function createQuestion() {
@@ -174,7 +241,26 @@ function evaluateAnswer(choice, button) {
     if (score >= 10) {
       score -= 10;
     }
+    if (isHitQuestion && hitQuestionPhase === 'symbol') {
+      questionText.textContent = 'Wrong! Boss fight restarts.';
+      scoreValue.textContent = score;
+      answerButtons.querySelectorAll('button').forEach((btn) => {
+        btn.disabled = true;
+      });
+      restartBossFight();
+      return;
+    }
     questionText.textContent = `Oops! The answer was ${currentQuestion.answer}.`;
+  }
+  if (isHitQuestion && hitQuestionPhase === 'brick' && boss && choice === currentQuestion.answer) {
+    boss.brickAnimation = {
+      active: true,
+      x: player.x + player.width,
+      y: player.y + player.height / 2 - 8,
+      width: 22,
+      height: 12,
+      speed: 14,
+    };
   }
   scoreValue.textContent = score;
   answerButtons.querySelectorAll('button').forEach((btn) => {
@@ -225,7 +311,9 @@ function handleFailedQuestion() {
   }
 
   if (isHitQuestion && hitQuestionPhase === 'symbol') {
-    questionText.textContent = 'Hit symbol failed. Recover and keep dodging.';
+    questionText.textContent = 'Hit symbol failed. Boss fight restarts.';
+    restartBossFight();
+    return;
   } else {
     questionText.textContent = 'Time ran out! Next question incoming.';
   }
@@ -290,7 +378,7 @@ function update(deltaTime) {
       obstacle.x -= scrollSpeed;
     });
 
-    if (level === 1 && score >= 1000) {
+    if (level === 1 && score >= 700) {
       startBossFight();
     }
   }
@@ -359,6 +447,7 @@ function startBossFight() {
     bullets: [],
     dodged: 0,
     hits: 0,
+    brickAnimation: null,
   };
   obstacles = [];
   currentQuestion = null;
@@ -371,7 +460,7 @@ function spawnBossBullet() {
   const type = symbols[Math.floor(Math.random() * symbols.length)];
   boss.bullets.push({
     x: boss.x,
-    y: boss.y + 30,
+    y: boss.y + rand(20, boss.height - 26),
     width: 26,
     height: 26,
     vx: -6 - (level === 2 ? 2 : 0),
@@ -382,6 +471,10 @@ function spawnBossBullet() {
 
 function updateBoss(deltaTime) {
   if (!boss) return;
+
+  if (isHitQuestion && hitQuestionPhase === 'symbol') {
+    return; // pause boss bullets while recovering from a symbol hit
+  }
 
   if (boss.stage === 1) {
     boss.bulletTimer += deltaTime;
@@ -417,6 +510,27 @@ function updateBoss(deltaTime) {
       });
     }
   }
+
+  if (boss.brickAnimation && boss.brickAnimation.active) {
+    boss.brickAnimation.x += boss.brickAnimation.speed;
+    if (boss.brickAnimation.x > boss.x) {
+      boss.brickAnimation.active = false;
+    }
+  }
+}
+
+function restartBossFight() {
+  if (!boss) return;
+  boss.stage = 1;
+  boss.bullets = [];
+  boss.bulletTimer = 0;
+  boss.dodged = 0;
+  boss.hits = 0;
+  isHitQuestion = false;
+  hitQuestionPhase = null;
+  currentQuestion = null;
+  answerButtons.innerHTML = '';
+  questionText.textContent = 'Boss fight restarts! Dodge the math symbols.';
 }
 
 function startHitQuestion(symbolType) {
@@ -440,17 +554,38 @@ function startBrickPhase() {
 
 function defeatBoss() {
   boss = null;
-  level = 2;
   player.color = '#f08f00';
-  scrollSpeed = parseInt(speedSlider.value, 10) + 2;
-  questionText.textContent = 'Boss defeated! Welcome to Level 2: Desert.';
+  questionText.textContent = 'Boss defeated! Prepare for the next choice.';
   answerButtons.innerHTML = '';
   isHitQuestion = false;
   hitQuestionPhase = null;
-  setTimeout(() => {
-    currentQuestion = createQuestion();
-    renderQuestion();
-  }, 1000);
+  showLevelTransitionPrompt();
+}
+
+function showLevelTransitionPrompt() {
+  levelTransitionPending = true;
+  gameState = 'levelTransition';
+  transitionOverlay.classList.remove('hidden');
+  setDifficultyControlsEnabled(false);
+}
+
+function chooseStayHere() {
+  levelTransitionPending = false;
+  transitionOverlay.classList.add('hidden');
+  gameState = 'playing';
+  level = 1;
+  currentQuestion = createQuestion();
+  renderQuestion();
+}
+
+function chooseGoToDesert() {
+  levelTransitionPending = false;
+  transitionOverlay.classList.add('hidden');
+  gameState = 'playing';
+  level = 2;
+  scrollSpeed = parseInt(speedSlider.value, 10) + 2;
+  currentQuestion = createQuestion();
+  renderQuestion();
 }
 
 function checkCollision() {
@@ -484,16 +619,37 @@ function draw() {
   if (boss) {
     ctx.fillStyle = '#8b0000';
     ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText(`Boss`, boss.x + 10, boss.y + 24);
-    ctx.fillText(`Bricks: ${boss.hits}/6`, boss.x + 10, boss.y + 44);
-    ctx.fillText(`Dodged: ${boss.dodged}/10`, boss.x + 10, boss.y + 64);
-    ctx.font = 'bold 28px Arial';
+
+    ctx.fillStyle = '#8b0000';
+    ctx.beginPath();
+    ctx.moveTo(boss.x + 20, boss.y);
+    ctx.lineTo(boss.x + 34, boss.y - 22);
+    ctx.lineTo(boss.x + 48, boss.y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(boss.x + boss.width - 20, boss.y);
+    ctx.lineTo(boss.x + boss.width - 34, boss.y - 22);
+    ctx.lineTo(boss.x + boss.width - 48, boss.y);
+    ctx.closePath();
+    ctx.fill();
+
     boss.bullets.forEach((bullet) => {
       ctx.fillStyle = '#000';
+      ctx.font = 'bold 28px Arial';
       ctx.fillText(bullet.type, bullet.x, bullet.y + bullet.height - 6);
     });
+
+    if (boss.brickAnimation && boss.brickAnimation.active) {
+      ctx.fillStyle = '#a0522d';
+      ctx.fillRect(
+        boss.brickAnimation.x,
+        boss.brickAnimation.y,
+        boss.brickAnimation.width,
+        boss.brickAnimation.height
+      );
+    }
   }
 
   ctx.fillStyle = '#ffffff';
@@ -503,11 +659,16 @@ function draw() {
 
 let lastTime = 0;
 function gameLoop(timestamp) {
-  if (gameState !== 'playing') return;
+  if (gameState === 'ready' || gameState === 'gameOver') return;
   const deltaTime = timestamp - lastTime;
   lastTime = timestamp;
 
-  update(deltaTime);
+  if (gameState === 'playing') {
+    update(deltaTime);
+  } else if (gameState === 'revivePending') {
+    updateRevive(deltaTime);
+  }
+
   draw();
   window.requestAnimationFrame(gameLoop);
 }
@@ -520,12 +681,24 @@ window.addEventListener('keydown', (event) => {
       startGame();
       return;
     }
+    if (gameState === 'revivePending') {
+      return;
+    }
     if (player && player.isOnGround) {
       player.vy = -settings.jumpPower;
       player.isOnGround = false;
     }
   }
 });
+
+function updateRevive(deltaTime) {
+  if (!revivePending) return;
+  reviveTimer -= deltaTime;
+  reviveTimerText.textContent = Math.max(0, Math.ceil(reviveTimer / 1000)).toString();
+  if (reviveTimer <= 0) {
+    completeGameOver();
+  }
+}
 
 function updateDifficultyLabels() {
   speedValueLabel.textContent = speedSlider.value;
@@ -534,25 +707,115 @@ function updateDifficultyLabels() {
   timeoutValueLabel.textContent = timeoutSlider.value;
 }
 
+function applyDifficulty(mode, syncSliders = true) {
+  difficultyMode = mode;
+  easyBtn.classList.toggle('selected', mode === 'easy');
+  normalBtn.classList.toggle('selected', mode === 'normal');
+  hardBtn.classList.toggle('selected', mode === 'hard');
+  customBtn.classList.toggle('selected', mode === 'custom');
+
+  if (mode === 'custom') {
+    speedSlider.disabled = false;
+    jumpSlider.disabled = false;
+    spacingSlider.disabled = false;
+    timeoutSlider.disabled = false;
+    if (syncSliders) {
+      scrollSpeed = parseInt(speedSlider.value, 10);
+      settings.jumpPower = parseInt(jumpSlider.value, 10);
+      settings.obstacleSpacing = parseInt(spacingSlider.value, 10);
+      settings.questionTimeout = parseInt(timeoutSlider.value, 10);
+      updateDifficultyLabels();
+    }
+  } else {
+    const preset = difficultyPresets[mode];
+    scrollSpeed = preset.speed;
+    settings.jumpPower = preset.jumpPower;
+    settings.obstacleSpacing = preset.obstacleSpacing;
+    settings.questionTimeout = preset.questionTimeout;
+    speedSlider.value = preset.speed;
+    jumpSlider.value = preset.jumpPower;
+    spacingSlider.value = preset.obstacleSpacing;
+    timeoutSlider.value = preset.questionTimeout;
+    updateDifficultyLabels();
+    speedSlider.disabled = true;
+    jumpSlider.disabled = true;
+    spacingSlider.disabled = true;
+    timeoutSlider.disabled = true;
+  }
+}
+
+function setDifficultyControlsEnabled(enabled) {
+  easyBtn.disabled = !enabled;
+  normalBtn.disabled = !enabled;
+  hardBtn.disabled = !enabled;
+  customBtn.disabled = !enabled;
+
+  if (!enabled) {
+    speedSlider.disabled = true;
+    jumpSlider.disabled = true;
+    spacingSlider.disabled = true;
+    timeoutSlider.disabled = true;
+    return;
+  }
+
+  if (difficultyMode === 'custom') {
+    speedSlider.disabled = false;
+    jumpSlider.disabled = false;
+    spacingSlider.disabled = false;
+    timeoutSlider.disabled = false;
+  } else {
+    speedSlider.disabled = true;
+    jumpSlider.disabled = true;
+    spacingSlider.disabled = true;
+    timeoutSlider.disabled = true;
+  }
+}
+
 speedSlider.addEventListener('input', () => {
-  scrollSpeed = parseInt(speedSlider.value, 10);
-  updateDifficultyLabels();
+  if (difficultyMode === 'custom') {
+    scrollSpeed = parseInt(speedSlider.value, 10);
+    updateDifficultyLabels();
+  }
 });
 
 jumpSlider.addEventListener('input', () => {
-  settings.jumpPower = parseInt(jumpSlider.value, 10);
-  updateDifficultyLabels();
+  if (difficultyMode === 'custom') {
+    settings.jumpPower = parseInt(jumpSlider.value, 10);
+    updateDifficultyLabels();
+  }
 });
 
 spacingSlider.addEventListener('input', () => {
-  settings.obstacleSpacing = parseInt(spacingSlider.value, 10);
-  updateDifficultyLabels();
+  if (difficultyMode === 'custom') {
+    settings.obstacleSpacing = parseInt(spacingSlider.value, 10);
+    updateDifficultyLabels();
+  }
 });
 
 timeoutSlider.addEventListener('input', () => {
-  settings.questionTimeout = parseInt(timeoutSlider.value, 10);
-  updateDifficultyLabels();
+  if (difficultyMode === 'custom') {
+    settings.questionTimeout = parseInt(timeoutSlider.value, 10);
+    updateDifficultyLabels();
+  }
 });
+
+easyBtn.addEventListener('click', () => applyDifficulty('easy'));
+normalBtn.addEventListener('click', () => applyDifficulty('normal'));
+hardBtn.addEventListener('click', () => applyDifficulty('hard'));
+customBtn.addEventListener('click', () => applyDifficulty('custom'));
+
+reviveCheckbox.addEventListener('change', () => {
+  reviveEnabled = reviveCheckbox.checked;
+});
+
+reviveButton.addEventListener('click', () => {
+  if (revivePending) {
+    revivePlayer();
+  }
+});
+
+stayButton.addEventListener('click', chooseStayHere);
+goButton.addEventListener('click', chooseGoToDesert);
 
 canvas.addEventListener('click', () => {
   if (gameState === 'ready' || gameState === 'gameOver') {

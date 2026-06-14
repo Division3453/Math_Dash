@@ -32,11 +32,63 @@ h1 {
 }
 
 .game-panel {
+  position: relative;
   background: var(--surface);
   border: 2px solid #cdd9e5;
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+}
+
+.revive-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(16, 24, 40, 0.6);
+  z-index: 10;
+}
+
+.revive-overlay.hidden {
+  display: none;
+}
+
+.revive-box {
+  width: min(320px, 90%);
+  padding: 24px;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  text-align: center;
+}
+
+.revive-title {
+  font-size: 22px;
+  font-weight: 900;
+  color: #1f2937;
+  margin-bottom: 14px;
+}
+
+.revive-timer {
+  font-size: 48px;
+  font-weight: 900;
+  color: #ef4444;
+  margin-bottom: 18px;
+}
+
+.revive-button {
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.revive-button:hover {
+  background: #1d4ed8;
 }
 
 canvas {
@@ -107,6 +159,35 @@ canvas {
   margin: 0 0 12px;
   font-size: 18px;
   color: #1b264f;
+}
+
+.difficulty-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.difficulty-button {
+  flex: 1 1 auto;
+  padding: 10px 14px;
+  border: 1px solid #cdd9e5;
+  border-radius: 10px;
+  background: #f6f9ff;
+  color: #1f2d3d;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.difficulty-button.selected {
+  background: #2c7be5;
+  color: #ffffff;
+  border-color: #1d5bbf;
+}
+
+.difficulty-button:hover {
+  background: #e8f0ff;
 }
 
 .setting {

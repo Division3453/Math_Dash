@@ -25,6 +25,15 @@
       </div>
       <div class="settings-panel">
         <h2>Difficulty Settings</h2>
+        <div class="difficulty-selector">
+          <button id="easyBtn" class="difficulty-button selected">Easy</button>
+          <button id="normalBtn" class="difficulty-button">Normal</button>
+          <button id="hardBtn" class="difficulty-button">Hard</button>
+          <button id="customBtn" class="difficulty-button">Custom</button>
+        </div>
+        <div class="setting revive-setting">
+          <label><input id="reviveCheckbox" type="checkbox" checked /> Enable revives</label>
+        </div>
         <div class="setting">
           <label for="speedSlider">Player speed <span id="speedValue">6</span></label>
           <input id="speedSlider" type="range" min="3" max="12" step="1" value="6" />
@@ -40,6 +49,20 @@
         <div class="setting">
           <label for="timeoutSlider">Question timeout <span id="timeoutValue">5000</span> ms</label>
           <input id="timeoutSlider" type="range" min="2000" max="10000" step="500" value="5000" />
+        </div>
+      </div>
+      <div id="reviveOverlay" class="revive-overlay hidden">
+        <div class="revive-box">
+          <div class="revive-title">REVIVE?</div>
+          <div id="reviveTimerText" class="revive-timer">13</div>
+          <button id="reviveButton" class="revive-button">REVIVE!</button>
+        </div>
+      </div>
+      <div id="transitionOverlay" class="revive-overlay hidden">
+        <div class="revive-box">
+          <div class="revive-title">Would you like to go to The Desert?</div>
+          <button id="stayButton" class="revive-button">No, I'll stay here</button>
+          <button id="goButton" class="revive-button" style="margin-top: 10px;">Yep!, I'd love to come and get hot!</button>
         </div>
       </div>
     </div>
