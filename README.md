@@ -16,11 +16,5 @@ Math Dash is a browser-based math runner game built with HTML, CSS, and JavaScri
 - `styles.css` — visual styling
 - `main.js` — game logic and interaction
 
-## Publish on GitHub Pages
-1. Create a GitHub repository and push these files to it.
-2. In repository settings, enable **GitHub Pages**.
-3. Choose the branch (`main` or `master`) and folder (`/root` or `/docs`) that contains `index.html`.
-4. Visit the provided GitHub Pages URL to play.
-
 ## License
 This project is licensed under the MIT License. See the `LICENSE` file for details.
