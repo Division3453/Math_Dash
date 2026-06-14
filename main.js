@@ -171,7 +171,9 @@ function evaluateAnswer(choice, button) {
     }
   } else {
     button.classList.add('wrong');
-    score = Math.max(0, score - 10);
+    if (score >= 10) {
+      score -= 10;
+    }
     questionText.textContent = `Oops! The answer was ${currentQuestion.answer}.`;
   }
   scoreValue.textContent = score;
@@ -201,11 +203,14 @@ function evaluateAnswer(choice, button) {
 
 function handleFailedQuestion() {
   if (gameState !== 'playing') return;
-  score = Math.max(0, score - 15);
+  if (score >= 15) {
+    score -= 15;
+  }
   scoreValue.textContent = score;
   if (isHitQuestion && hitQuestionPhase === 'brick') {
     questionText.textContent = 'Brick throw failed. Try again.';
-    questionExpired = false;
+    questionExpired = true;
+    currentQuestion = null;
     if (timerFill) {
       timerFill.classList.remove('expired');
       timerFill.style.width = '100%';
@@ -227,7 +232,6 @@ function handleFailedQuestion() {
 
   isHitQuestion = false;
   hitQuestionPhase = null;
-  questionExpired = false;
   if (timerFill) {
     timerFill.classList.remove('expired');
     timerFill.style.width = '100%';
