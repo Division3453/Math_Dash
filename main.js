@@ -44,6 +44,9 @@ let hitQuestionPhase = null;
 let level = 1;
 let boss = null;
 let revivePending = false;
+let cannonPhase = false;
+let cannonShots = 0;
+let cannonRounds = 0;
 let reviveTimer = 0;
 let reviveEnabled = true;
 let difficultyMode = 'easy';
@@ -69,8 +72,14 @@ function resetGame() {
   hitQuestionPhase = null;
   level = 1;
   boss = null;
+  cannonPhase = false;
+  cannonShots = 0;
+  cannonRounds = 0;
   timeSinceStart = 0;
   obstacles = [];
+  let playerColor = '#444';
+  if (level === 2) playerColor = '#f08f00';
+  if (level === 3) playerColor = '#ffffff';
   player = {
     x: 80,
     y: groundY - 40,
@@ -78,7 +87,7 @@ function resetGame() {
     height: 40,
     vy: 0,
     isOnGround: true,
-    color: '#444',
+    color: playerColor,
   };
   currentQuestion = null;
   questionText.textContent = 'Press Space to Start';
@@ -226,11 +235,34 @@ function evaluateAnswer(choice, button) {
   if (choice === currentQuestion.answer) {
     button.classList.add('correct');
     score += 25;
-    if (isHitQuestion && hitQuestionPhase === 'brick' && boss) {
+    if (isHitQuestion && hitQuestionPhase === 'brick' && boss && boss.width <= 150) {
       boss.hits += 1;
       questionText.textContent = `Good hit! Bricks thrown: ${boss.hits}/6.`;
       if (boss.hits >= 6) {
         defeatBoss();
+      }
+    } else if (isHitQuestion && hitQuestionPhase === 'cannon' && boss && boss.width > 150) {
+      cannonShots += 1;
+      if (boss.cannonBalls === undefined) boss.cannonBalls = [];
+      boss.cannonBalls.push({
+        x: boss.cannonX + 40,
+        y: boss.cannonY + 40,
+        vx: 8,
+      });
+      if (cannonShots >= 5) {
+        cannonRounds += 1;
+        if (cannonRounds >= 5) {
+          defeatBoss();
+          return;
+        } else {
+          cannonShots = 0;
+          questionText.textContent = `Round ${cannonRounds + 1}/5! Take cannon and shoot (Shot 1/5).`;
+          currentQuestion = createQuestion();
+          renderQuestion();
+          return;
+        }
+      } else {
+        questionText.textContent = `Good shot! (Round ${cannonRounds + 1}/5, Shot ${cannonShots + 1}/5).`;
       }
     } else {
       obstaclesToClear = Math.max(obstaclesToClear, 3);
@@ -249,10 +281,13 @@ function evaluateAnswer(choice, button) {
       });
       restartBossFight();
       return;
+    } else if (isHitQuestion && hitQuestionPhase === 'cannon') {
+      questionText.textContent = 'Wrong! Try again.';
+    } else {
+      questionText.textContent = `Oops! The answer was ${currentQuestion.answer}.`;
     }
-    questionText.textContent = `Oops! The answer was ${currentQuestion.answer}.`;
   }
-  if (isHitQuestion && hitQuestionPhase === 'brick' && boss && choice === currentQuestion.answer) {
+  if (isHitQuestion && hitQuestionPhase === 'brick' && boss && boss.width <= 150 && choice === currentQuestion.answer) {
     boss.brickAnimation = {
       active: true,
       x: player.x + player.width,
@@ -267,7 +302,10 @@ function evaluateAnswer(choice, button) {
     btn.disabled = true;
   });
   setTimeout(() => {
-    if (boss && boss.stage === 2 && boss.hits < 6) {
+    if (boss && boss.stage === 2 && boss.width <= 150 && boss.hits < 6) {
+      currentQuestion = createQuestion();
+      renderQuestion();
+    } else if (boss && boss.stage === 2 && boss.width > 150 && cannonShots < 5) {
       currentQuestion = createQuestion();
       renderQuestion();
     } else if (!isHitQuestion || (isHitQuestion && hitQuestionPhase === 'symbol')) {
@@ -310,6 +348,23 @@ function handleFailedQuestion() {
     return;
   }
 
+  if (isHitQuestion && hitQuestionPhase === 'cannon') {
+    questionText.textContent = 'Cannon shot failed. Try again.';
+    questionExpired = true;
+    currentQuestion = null;
+    if (timerFill) {
+      timerFill.classList.remove('expired');
+      timerFill.style.width = '100%';
+    }
+    setTimeout(() => {
+      if (gameState === 'playing') {
+        currentQuestion = createQuestion();
+        renderQuestion();
+      }
+    }, 1000);
+    return;
+  }
+
   if (isHitQuestion && hitQuestionPhase === 'symbol') {
     questionText.textContent = 'Hit symbol failed. Boss fight restarts.';
     restartBossFight();
@@ -334,12 +389,18 @@ function handleFailedQuestion() {
 
 function spawnObstacle() {
   const height = rand(30, 50);
-  obstacles.push({
+  let obstacle = {
     x: gameWidth + 20,
     y: groundY - height,
     width: rand(20, 30),
     height,
-  });
+  };
+  if (level === 3) {
+    // Level 3: polar bears and penguins
+    const types = ['bear', 'penguin'];
+    obstacle.type = types[Math.floor(Math.random() * types.length)];
+  }
+  obstacles.push(obstacle);
 }
 
 function update(deltaTime) {
@@ -379,7 +440,10 @@ function update(deltaTime) {
     });
 
     if (level === 1 && score >= 700) {
-      startBossFight();
+      startBossFight(1);
+    }
+    if (level === 2 && score >= 1500) {
+      startBossFight(2);
     }
   }
 
@@ -436,31 +500,61 @@ function createQuestionOfType(type) {
   return { a, b, type, answer, choices };
 }
 
-function startBossFight() {
-  boss = {
-    stage: 1,
-    x: gameWidth - 180,
-    y: groundY - 100,
-    width: 140,
-    height: 80,
-    bulletTimer: 0,
-    bullets: [],
-    dodged: 0,
-    hits: 0,
-    brickAnimation: null,
-  };
-  obstacles = [];
-  currentQuestion = null;
-  answerButtons.innerHTML = '';
-  questionText.textContent = 'Boss appears! Dodge the math symbols.';
+function startBossFight(bossLevel) {
+  if (bossLevel === 1) {
+    boss = {
+      stage: 1,
+      x: gameWidth - 180,
+      y: groundY - 100,
+      width: 140,
+      height: 80,
+      bulletTimer: 0,
+      bullets: [],
+      dodged: 0,
+      hits: 0,
+      brickAnimation: null,
+    };
+    obstacles = [];
+    currentQuestion = null;
+    answerButtons.innerHTML = '';
+    questionText.textContent = 'Boss appears! Dodge the math symbols.';
+  } else if (bossLevel === 2) {
+    boss = {
+      stage: 1,
+      x: gameWidth - 200,
+      y: groundY - 100,
+      width: 160,
+      height: 80,
+      bulletTimer: 0,
+      bullets: [],
+      dodged: 0,
+      hits: 0,
+      brickAnimation: null,
+      cannonX: gameWidth - 160,
+      cannonY: groundY - 100,
+      cannonBalls: [],
+    };
+    obstacles = [];
+    cannonPhase = false;
+    cannonShots = 0;
+    cannonRounds = 0;
+    currentQuestion = null;
+    answerButtons.innerHTML = '';
+    questionText.textContent = 'Desert Boss appears! Dodge the cannon symbols (22).';
+  }
 }
 
 function spawnBossBullet() {
   const symbols = ['+', '-', '×', '÷'];
   const type = symbols[Math.floor(Math.random() * symbols.length)];
+  let y = boss.y + rand(20, boss.height - 26);
+  if (boss.width > 150) {
+    // Level 2 boss: varied heights
+    y = rand(60, groundY - 80);
+  }
   boss.bullets.push({
     x: boss.x,
-    y: boss.y + rand(20, boss.height - 26),
+    y: y,
     width: 26,
     height: 26,
     vx: -6 - (level === 2 ? 2 : 0),
@@ -477,44 +571,88 @@ function updateBoss(deltaTime) {
   }
 
   if (boss.stage === 1) {
-    boss.bulletTimer += deltaTime;
-    if (boss.bulletTimer > 900) {
-      boss.bulletTimer = 0;
-      spawnBossBullet();
-    }
-
-    boss.bullets.forEach((bullet) => {
-      bullet.x += bullet.vx;
-      if (!bullet.counted && bullet.x + bullet.width < player.x) {
-        bullet.counted = true;
-        boss.dodged += 1;
-        if (boss.dodged >= 10) {
-          startBrickPhase();
-        }
+    if (boss.width > 150) {
+      // Level 2 boss with cannon
+      const dodgeTarget = 22;
+      boss.bulletTimer += deltaTime;
+      if (boss.bulletTimer > 800) {
+        boss.bulletTimer = 0;
+        spawnBossBullet();
       }
-    });
-
-    boss.bullets = boss.bullets.filter((bullet) => bullet.x + bullet.width > -20);
-
-    if (!isHitQuestion) {
-      boss.bullets.forEach((bullet, index) => {
-        if (
-          player.x < bullet.x + bullet.width &&
-          player.x + player.width > bullet.x &&
-          player.y < bullet.y + bullet.height &&
-          player.y + player.height > bullet.y
-        ) {
-          boss.bullets.splice(index, 1);
-          startHitQuestion(bullet.type);
+      boss.bullets.forEach((bullet) => {
+        bullet.x += bullet.vx;
+        if (!bullet.counted && bullet.x + bullet.width < player.x) {
+          bullet.counted = true;
+          boss.dodged += 1;
+          if (boss.dodged >= dodgeTarget) {
+            startCannonPhase();
+          }
         }
       });
-    }
-  }
+      boss.bullets = boss.bullets.filter((bullet) => bullet.x + bullet.width > -20);
+      if (!isHitQuestion) {
+        boss.bullets.forEach((bullet, index) => {
+          if (
+            player.x < bullet.x + bullet.width &&
+            player.x + player.width > bullet.x &&
+            player.y < bullet.y + bullet.height &&
+            player.y + player.height > bullet.y
+          ) {
+            boss.bullets.splice(index, 1);
+            startHitQuestion(bullet.type);
+          }
+        });
+      }
+    } else {
+      // Level 1 boss
+      boss.bulletTimer += deltaTime;
+      if (boss.bulletTimer > 900) {
+        boss.bulletTimer = 0;
+        spawnBossBullet();
+      }
 
-  if (boss.brickAnimation && boss.brickAnimation.active) {
-    boss.brickAnimation.x += boss.brickAnimation.speed;
-    if (boss.brickAnimation.x > boss.x) {
-      boss.brickAnimation.active = false;
+      boss.bullets.forEach((bullet) => {
+        bullet.x += bullet.vx;
+        if (!bullet.counted && bullet.x + bullet.width < player.x) {
+          bullet.counted = true;
+          boss.dodged += 1;
+          if (boss.dodged >= 10) {
+            startBrickPhase();
+          }
+        }
+      });
+
+      boss.bullets = boss.bullets.filter((bullet) => bullet.x + bullet.width > -20);
+
+      if (!isHitQuestion) {
+        boss.bullets.forEach((bullet, index) => {
+          if (
+            player.x < bullet.x + bullet.width &&
+            player.x + player.width > bullet.x &&
+            player.y < bullet.y + bullet.height &&
+            player.y + player.height > bullet.y
+          ) {
+            boss.bullets.splice(index, 1);
+            startHitQuestion(bullet.type);
+          }
+        });
+      }
+    }
+  } else if (boss.stage === 2 && boss.width <= 150) {
+    // Level 1 brick phase
+    if (boss.brickAnimation && boss.brickAnimation.active) {
+      boss.brickAnimation.x += boss.brickAnimation.speed;
+      if (boss.brickAnimation.x > boss.x) {
+        boss.brickAnimation.active = false;
+      }
+    }
+  } else if (boss.stage === 2 && boss.width > 150) {
+    // Level 2 cannon phase
+    if (boss.cannonBalls) {
+      boss.cannonBalls.forEach((ball) => {
+        ball.x += ball.vx;
+      });
+      boss.cannonBalls = boss.cannonBalls.filter((ball) => ball.x < boss.x);
     }
   }
 }
@@ -543,23 +681,55 @@ function startHitQuestion(symbolType) {
 
 function startBrickPhase() {
   if (!boss || boss.stage !== 1) return;
+  if (boss.width <= 150) {
+    // Level 1 brick phase
+    boss.stage = 2;
+    boss.bullets = [];
+    isHitQuestion = true;
+    hitQuestionPhase = 'brick';
+    currentQuestion = createQuestion();
+    questionText.textContent = `Boss is tired! Throw a brick (${boss.hits}/6).`;
+    renderQuestion();
+  }
+}
+
+function startCannonPhase() {
+  if (!boss || boss.stage !== 1) return;
   boss.stage = 2;
   boss.bullets = [];
+  cannonPhase = true;
+  cannonShots = 0;
+  cannonRounds = 0;
   isHitQuestion = true;
-  hitQuestionPhase = 'brick';
+  hitQuestionPhase = 'cannon';
   currentQuestion = createQuestion();
-  questionText.textContent = `Boss is tired! Throw a brick (${boss.hits}/6).`;
+  questionText.textContent = `Boss is tired! Take cannon and shoot (Round ${cannonRounds + 1}/5, Shot ${cannonShots + 1}/5).`;
   renderQuestion();
 }
 
 function defeatBoss() {
-  boss = null;
-  player.color = '#f08f00';
-  questionText.textContent = 'Boss defeated! Prepare for the next choice.';
-  answerButtons.innerHTML = '';
-  isHitQuestion = false;
-  hitQuestionPhase = null;
-  showLevelTransitionPrompt();
+  if (level === 1) {
+    boss = null;
+    player.color = '#f08f00';
+    questionText.textContent = 'Boss defeated! Prepare for the next choice.';
+    answerButtons.innerHTML = '';
+    isHitQuestion = false;
+    hitQuestionPhase = null;
+    cannonPhase = false;
+    showLevelTransitionPrompt();
+  } else if (level === 2) {
+    boss = null;
+    player.color = '#ffffff';
+    level = 3;
+    scrollSpeed = parseInt(speedSlider.value, 10) + 3;
+    questionText.textContent = 'Desert Boss defeated! Welcome to the Snowy Lands!';
+    answerButtons.innerHTML = '';
+    isHitQuestion = false;
+    hitQuestionPhase = null;
+    cannonPhase = false;
+    currentQuestion = createQuestion();
+    renderQuestion();
+  }
 }
 
 function showLevelTransitionPrompt() {
@@ -599,47 +769,131 @@ function checkCollision() {
   });
 }
 
+function drawObstacle(obstacle) {
+  if (level === 1) {
+    // Brown block
+    ctx.fillStyle = '#6b5533';
+    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+  } else if (level === 2) {
+    // Brown block (same for desert)
+    ctx.fillStyle = '#6b5533';
+    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+  } else if (level === 3) {
+    // Polar bear or penguin
+    if (obstacle.type === 'bear') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+      // Draw ears
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(obstacle.x + 8, obstacle.y - 5, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(obstacle.x + obstacle.width - 8, obstacle.y - 5, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // Draw eyes
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(obstacle.x + 10, obstacle.y + 8, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(obstacle.x + obstacle.width - 10, obstacle.y + 8, 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (obstacle.type === 'penguin') {
+      // Penguin (black and white)
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2 - 4, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(obstacle.x + obstacle.width / 2, obstacle.y + obstacle.height / 2 + 2, 6, 0, Math.PI * 2);
+      ctx.fill();
+      // Eyes
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.arc(obstacle.x + obstacle.width / 2 - 4, obstacle.y + obstacle.height / 2 - 6, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(obstacle.x + obstacle.width / 2 + 4, obstacle.y + obstacle.height / 2 - 6, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 function draw() {
   ctx.clearRect(0, 0, gameWidth, gameHeight);
 
-  ctx.fillStyle = level === 2 ? '#ffd598' : '#8ad3ff';
-  ctx.fillRect(0, 0, gameWidth, gameHeight);
-
-  ctx.fillStyle = level === 2 ? '#e2b15a' : '#85c1ef';
-  ctx.fillRect(0, groundY, gameWidth, gameHeight - groundY);
+  // Background and ground
+  if (level === 1) {
+    ctx.fillStyle = '#8ad3ff';
+    ctx.fillRect(0, 0, gameWidth, gameHeight);
+    ctx.fillStyle = '#85c1ef';
+    ctx.fillRect(0, groundY, gameWidth, gameHeight - groundY);
+  } else if (level === 2) {
+    ctx.fillStyle = '#ffd598';
+    ctx.fillRect(0, 0, gameWidth, gameHeight);
+    ctx.fillStyle = '#e2b15a';
+    ctx.fillRect(0, groundY, gameWidth, gameHeight - groundY);
+  } else if (level === 3) {
+    // Snowy lands
+    ctx.fillStyle = '#e8f4f8';
+    ctx.fillRect(0, 0, gameWidth, gameHeight);
+    ctx.fillStyle = '#d0e8f0';
+    ctx.fillRect(0, groundY, gameWidth, gameHeight - groundY);
+  }
 
   ctx.fillStyle = player.color;
   ctx.fillRect(player.x, player.y, player.width, player.height);
 
-  ctx.fillStyle = '#6b5533';
   obstacles.forEach((obstacle) => {
-    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+    drawObstacle(obstacle);
   });
 
   if (boss) {
-    ctx.fillStyle = '#8b0000';
-    ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
-
-    ctx.fillStyle = '#8b0000';
-    ctx.beginPath();
-    ctx.moveTo(boss.x + 20, boss.y);
-    ctx.lineTo(boss.x + 34, boss.y - 22);
-    ctx.lineTo(boss.x + 48, boss.y);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(boss.x + boss.width - 20, boss.y);
-    ctx.lineTo(boss.x + boss.width - 34, boss.y - 22);
-    ctx.lineTo(boss.x + boss.width - 48, boss.y);
-    ctx.closePath();
-    ctx.fill();
+    if (boss.width <= 150) {
+      // Level 1 boss
+      ctx.fillStyle = '#8b0000';
+      ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
+      ctx.fillStyle = '#8b0000';
+      ctx.beginPath();
+      ctx.moveTo(boss.x + 20, boss.y);
+      ctx.lineTo(boss.x + 34, boss.y - 22);
+      ctx.lineTo(boss.x + 48, boss.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(boss.x + boss.width - 20, boss.y);
+      ctx.lineTo(boss.x + boss.width - 34, boss.y - 22);
+      ctx.lineTo(boss.x + boss.width - 48, boss.y);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // Level 2 boss - yellow with cannon
+      ctx.fillStyle = '#FFD700';
+      ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
+      // Draw cannon
+      ctx.fillStyle = '#8B7500';
+      ctx.beginPath();
+      ctx.arc(boss.cannonX + 30, boss.cannonY + 35, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(boss.cannonX + 35, boss.cannonY + 25, 25, 10);
+    }
 
     boss.bullets.forEach((bullet) => {
       ctx.fillStyle = '#000';
       ctx.font = 'bold 28px Arial';
       ctx.fillText(bullet.type, bullet.x, bullet.y + bullet.height - 6);
     });
+
+    if (boss.width > 150 && boss.cannonBalls) {
+      boss.cannonBalls.forEach((ball) => {
+        ctx.fillStyle = '#8B4513';
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
 
     if (boss.brickAnimation && boss.brickAnimation.active) {
       ctx.fillStyle = '#a0522d';
@@ -652,7 +906,16 @@ function draw() {
     }
   }
 
-  ctx.fillStyle = '#ffffff';
+  // Draw cannon in player's hands during cannon phase
+  if (cannonPhase && boss && boss.width > 150) {
+    ctx.fillStyle = '#8B7500';
+    ctx.beginPath();
+    ctx.arc(player.x + player.width + 5, player.y + 10, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(player.x + player.width + 8, player.y + 6, 15, 6);
+  }
+
+  ctx.fillStyle = '#000000';
   ctx.font = 'bold 24px Arial';
   ctx.fillText('Math Dash', 16, 30);
 }
