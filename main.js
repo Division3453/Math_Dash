@@ -469,7 +469,9 @@ function update(deltaTime) {
     timerFill.style.width = `${percent}%`;
   }
 
-  score += deltaTime * 0.01;
+  if (!boss) {
+    score += deltaTime * 0.01;
+  }
   scoreValue.textContent = Math.floor(score);
 }
 
