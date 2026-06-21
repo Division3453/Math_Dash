@@ -34,6 +34,12 @@
         <div class="setting revive-setting">
           <label><input id="reviveCheckbox" type="checkbox" checked /> Enable revives</label>
         </div>
+        <div class="setting audio-setting">
+          <label><input id="musicToggle" type="checkbox" checked /> Music</label>
+          <label><input id="sfxToggle" type="checkbox" checked /> Sound effects</label>
+          <label for="volumeSlider">Volume <span id="volumeValue">80</span>%</label>
+          <input id="volumeSlider" type="range" min="0" max="100" step="5" value="80" />
+        </div>
         <div class="setting">
           <label for="speedSlider">Player speed <span id="speedValue">6</span></label>
           <input id="speedSlider" type="range" min="3" max="12" step="1" value="6" />

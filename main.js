@@ -234,7 +234,9 @@ function evaluateAnswer(choice, button) {
   if (gameState !== 'playing' || !currentQuestion) return;
   if (choice === currentQuestion.answer) {
     button.classList.add('correct');
-    score += 25;
+    if (!isHitQuestion) {
+      score += 25;
+    }
     if (isHitQuestion && hitQuestionPhase === 'brick' && boss && boss.width <= 150) {
       boss.hits += 1;
       questionText.textContent = `Good hit! Bricks thrown: ${boss.hits}/6.`;
@@ -295,6 +297,7 @@ function evaluateAnswer(choice, button) {
       width: 22,
       height: 12,
       speed: 14,
+      rotation: 0,
     };
   }
   scoreValue.textContent = score;
@@ -644,6 +647,7 @@ function updateBoss(deltaTime) {
     // Level 1 brick phase
     if (boss.brickAnimation && boss.brickAnimation.active) {
       boss.brickAnimation.x += boss.brickAnimation.speed;
+      boss.brickAnimation.rotation += 0.3;
       if (boss.brickAnimation.x > boss.x) {
         boss.brickAnimation.active = false;
       }
@@ -898,13 +902,19 @@ function draw() {
     }
 
     if (boss.brickAnimation && boss.brickAnimation.active) {
+      ctx.save();
+      const brickCenterX = boss.brickAnimation.x + boss.brickAnimation.width / 2;
+      const brickCenterY = boss.brickAnimation.y + boss.brickAnimation.height / 2;
+      ctx.translate(brickCenterX, brickCenterY);
+      ctx.rotate(boss.brickAnimation.rotation);
       ctx.fillStyle = '#a0522d';
       ctx.fillRect(
-        boss.brickAnimation.x,
-        boss.brickAnimation.y,
+        -boss.brickAnimation.width / 2,
+        -boss.brickAnimation.height / 2,
         boss.brickAnimation.width,
         boss.brickAnimation.height
       );
+      ctx.restore();
     }
   }
 
