@@ -92,7 +92,7 @@ function resetGame() {
   currentQuestion = null;
   questionText.textContent = 'Press Space to Start';
   answerButtons.innerHTML = '';
-  scoreValue.textContent = score;
+  scoreValue.textContent = Math.floor(score);
 }
 
 function startGame() {
@@ -202,6 +202,16 @@ function rand(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function getScoreReward() {
+  const rewards = {
+    easy: 15,
+    normal: 25,
+    hard: 35,
+    custom: 25,
+  };
+  return rewards[difficultyMode] || 25;
+}
+
 function shuffle(array) {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -235,7 +245,7 @@ function evaluateAnswer(choice, button) {
   if (choice === currentQuestion.answer) {
     button.classList.add('correct');
     if (!isHitQuestion) {
-      score += 25;
+      score += getScoreReward();
     }
     if (isHitQuestion && hitQuestionPhase === 'brick' && boss && boss.width <= 150) {
       boss.hits += 1;
@@ -277,7 +287,7 @@ function evaluateAnswer(choice, button) {
     }
     if (isHitQuestion && hitQuestionPhase === 'symbol') {
       questionText.textContent = 'Wrong! Boss fight restarts.';
-      scoreValue.textContent = score;
+      scoreValue.textContent = Math.floor(score);
       answerButtons.querySelectorAll('button').forEach((btn) => {
         btn.disabled = true;
       });
@@ -300,7 +310,7 @@ function evaluateAnswer(choice, button) {
       rotation: 0,
     };
   }
-  scoreValue.textContent = score;
+  scoreValue.textContent = Math.floor(score);
   answerButtons.querySelectorAll('button').forEach((btn) => {
     btn.disabled = true;
   });
@@ -333,7 +343,7 @@ function handleFailedQuestion() {
   if (score >= 15) {
     score -= 15;
   }
-  scoreValue.textContent = score;
+  scoreValue.textContent = Math.floor(score);
   if (isHitQuestion && hitQuestionPhase === 'brick') {
     questionText.textContent = 'Brick throw failed. Try again.';
     questionExpired = true;
